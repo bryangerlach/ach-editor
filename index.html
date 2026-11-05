@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ACH Studio — NACHA file editor</title>
+  <meta name="description" content="Open, inspect and edit NACHA ACH files with labeled fields and automatic control total recalculation.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%233b5bdb'/%3E%3Ctext x='32' y='42' font-family='monospace' font-size='24' font-weight='700' text-anchor='middle' fill='white'%3EACH%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">ACH</div>
+        <div class="brand-text">
+          <span class="brand-name">ACH Studio</span>
+          <span class="brand-sub">NACHA file editor</span>
+        </div>
+      </div>
+
+      <div class="file-meta">
+        <span class="file-name" id="fileName">No file open</span>
+        <span class="dirty-dot" id="dirtyDot" hidden title="Unsaved changes"></span>
+      </div>
+
+      <div class="top-actions">
+        <button class="btn" id="btnOpen" type="button" title="Open an ACH file (Ctrl+O)">
+          <span class="btn-icon" aria-hidden="true">&#8593;</span> Open
+        </button>
+        <button class="btn" id="btnSave" type="button" disabled title="Save (Ctrl+S)">
+          <span class="btn-icon" aria-hidden="true">&#8595;</span> Save
+        </button>
+        <button class="btn" id="btnSaveAs" type="button" disabled title="Save as a new file (Ctrl+Shift+S)">Save as</button>
+        <button class="btn btn-accent" id="btnRecalc" type="button" disabled title="Recalculate all control totals, hashes, counts and padding">
+          Recalculate
+        </button>
+        <div class="menu-wrap">
+          <button class="btn btn-icon" id="btnSettings" type="button" aria-label="Settings" aria-expanded="false" title="Settings">&#9881;</button>
+          <div class="menu" id="settingsMenu" hidden>
+            <div class="menu-head">Settings</div>
+            <label class="menu-check">
+              <input type="checkbox" id="optAutoFix" checked>
+              <span>
+                <strong>Protect derived fields</strong>
+                <small>Recalculate hashes, counts and totals as you edit</small>
+              </span>
+            </label>
+            <label class="menu-check">
+              <input type="checkbox" id="optWhitespace">
+              <span>
+                <strong>Show spaces in raw records</strong>
+                <small>Display spaces as dots so blank padding is visible</small>
+              </span>
+            </label>
+            <div class="menu-sep"></div>
+            <label class="menu-row">
+              <span>Line endings</span>
+              <select id="optLineEnding">
+                <option value="crlf">Windows (CRLF)</option>
+                <option value="lf">Unix (LF)</option>
+              </select>
+            </label>
+            <label class="menu-check">
+              <input type="checkbox" id="optFinalNewline">
+              <span>
+                <strong>End file with a newline</strong>
+                <small>Most ACH files include a final line break</small>
+              </span>
+            </label>
+            <div class="menu-sep"></div>
+            <button class="menu-action" id="btnRawFile" type="button">View raw file&hellip;</button>
+            <button class="menu-action" id="btnLoadSampleMenu" type="button">Load sample file</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="banner" id="banner" hidden>
+      <div class="banner-body">
+        <span class="banner-dot" aria-hidden="true"></span>
+        <div class="banner-text">
+          <strong id="bannerTitle"></strong>
+          <span id="bannerMessage"></span>
+        </div>
+      </div>
+      <div class="banner-actions" id="bannerActions"></div>
+    </div>
+
+    <div class="empty" id="emptyState">
+      <div class="empty-inner">
+        <div class="empty-mark" aria-hidden="true">94</div>
+        <p class="eyebrow">NACHA / ACH</p>
+        <h1>Read and edit ACH files without counting characters by hand.</h1>
+        <p class="empty-lead">
+          Drop an <code>.ach</code> file anywhere on this window. Each record is split into
+          labeled fields with positions, validation and live control total recalculation.
+        </p>
+        <div class="empty-actions">
+          <button class="btn btn-accent btn-lg" id="btnOpenEmpty" type="button">Open ACH file</button>
+          <button class="btn btn-lg" id="btnSampleEmpty" type="button">Load sample</button>
+        </div>
+        <div class="drop-hint">
+          <span class="drop-key">Drop file here</span>
+          <span>or use Ctrl+O</span>
+        </div>
+        <div class="restore-host" id="restoreHost"></div>
+      </div>
+      <div class="feature-row">
+        <div class="feature">
+          <span class="feature-num">01</span>
+          <strong>Every field labeled</strong>
+          <p>File header, batches, entries, addenda, batch controls and file control are broken out with NACHA positions and descriptions.</p>
+        </div>
+        <div class="feature">
+          <span class="feature-num">02</span>
+          <strong>Controls recalculated</strong>
+          <p>Entry hashes, debit and credit totals, record counts, block count and padding are derived from the entries.</p>
+        </div>
+        <div class="feature">
+          <span class="feature-num">03</span>
+          <strong>Validated as you type</strong>
+          <p>Checks routing check digits, required fields, service class conflicts, addenda counts and fixed values.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="workspace" id="workspace" hidden>
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-scroll">
+          <div id="summaryHost"></div>
+          <div class="outline-block">
+            <div class="outline-title">Contents</div>
+            <nav class="outline" id="outline" aria-label="File contents"></nav>
+          </div>
+          <div class="sidebar-tip">
+            <strong>Tip</strong>
+            <p>Derived fields have an <span class="auto-badge">AUTO</span> badge. Recalculate overwrites them from the entries.</p>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main" id="main">
+        <div class="main-inner">
+          <div id="bannerInline"></div>
+          <div id="mapHost"></div>
+          <div id="diagnosticsHost"></div>
+          <div id="sections"></div>
+          <div class="main-footer">
+            <span>ACH Studio runs entirely on this computer. Files are never uploaded.</span>
+            <button class="linklike" id="btnRawFooter" type="button">View raw file</button>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <footer class="statusbar">
+      <span id="statusLeft">Ready</span>
+      <span id="statusCenter"></span>
+      <span id="statusRight"></span>
+    </footer>
+  </div>
+
+  <div class="drop-overlay" id="dropOverlay" hidden>
+    <div class="drop-overlay-inner">
+      <div class="drop-big">Drop ACH file</div>
+      <p>The file stays on your computer.</p>
+    </div>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+  <div id="modalRoot"></div>
+
+  <datalist id="dl-return-codes"></datalist>
+  <datalist id="dl-change-codes"></datalist>
+  <input type="file" id="fileInput" accept=".ach,.txt,text/plain" hidden>
+
+  <script src="js/core.js"></script>
+  <script src="js/sample.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

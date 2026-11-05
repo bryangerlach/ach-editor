@@ -1,0 +1,14 @@
+services:
+  ach-studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Use a published image instead of building by setting ACH_STUDIO_IMAGE.
+    image: "${ACH_STUDIO_IMAGE:-ach-studio:latest}"
+    container_name: ach-studio
+    ports:
+      # Host port. Override with ACH_STUDIO_PORT=9000 or a .env file.
+      - "${ACH_STUDIO_PORT:-8080}:80"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true

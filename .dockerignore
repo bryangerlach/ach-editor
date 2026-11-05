@@ -1,0 +1,13 @@
+.git
+.github
+.gitignore
+.gitattributes
+node_modules
+npm-debug.log*
+.env
+.env.*
+README.md
+tools
+samples
+Dockerfile
+docker-compose.yml

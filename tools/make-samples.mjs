@@ -1,0 +1,166 @@
+import { createRequire } from 'node:module';
+import { writeFileSync, mkdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const require = createRequire(import.meta.url);
+const ACH = require('../js/core.js');
+const here = dirname(fileURLToPath(import.meta.url));
+const root = join(here, '..');
+
+function rec(kind, values = {}) {
+  const record = ACH.createRecord(kind);
+  Object.assign(record.fields, values);
+  return record;
+}
+
+function entry(values, addenda = []) {
+  return {
+    detail: rec('entryDetail', {
+      transactionCode: '22',
+      identificationNumber: '',
+      individualName: '',
+      discretionaryData: '',
+      ...values
+    }),
+    addenda
+  };
+}
+
+const doc = {
+  fileHeader: rec('fileHeader', {
+    priorityCode: '01',
+    immediateDestination: ' 231380104',
+    immediateOrigin: ' 123456789',
+    fileCreationDate: '261105',
+    fileCreationTime: '0930',
+    fileIDModifier: 'A',
+    immediateDestinationName: 'ACME BANK, N.A.',
+    immediateOriginName: 'ACME PAYROLL INC',
+    referenceCode: 'PAYROLL1'
+  }),
+  batches: [
+    {
+      header: rec('batchHeader', {
+        serviceClassCode: '220',
+        companyName: 'ACME PAYROLL INC',
+        companyDiscretionaryData: 'PAYROLL 2026',
+        companyIdentification: '1234567890',
+        standardEntryClassCode: 'PPD',
+        companyEntryDescription: 'PAYROLL',
+        companyDescriptiveDate: '261101',
+        effectiveEntryDate: '261106',
+        settlementDate: '',
+        originatorStatusCode: '1',
+        originatingDFIIdentification: '12345678',
+        batchNumber: '0000001'
+      }),
+      entries: [
+        entry({
+          transactionCode: '22',
+          receivingDFIIdentification: '23138010',
+          checkDigit: '4',
+          dfiAccountNumber: '000123456789',
+          amount: '0000250000',
+          identificationNumber: 'EMP0001',
+          individualName: 'JANE DOE',
+          addendaRecordIndicator: '0',
+          traceNumber: '123456780000001'
+        }),
+        entry({
+          transactionCode: '22',
+          receivingDFIIdentification: '02100002',
+          checkDigit: '1',
+          dfiAccountNumber: '9876543210',
+          amount: '0000185075',
+          identificationNumber: 'EMP0002',
+          individualName: 'JOHN SMITH',
+          addendaRecordIndicator: '1',
+          traceNumber: '123456780000002'
+        }, [
+          rec('addenda', {
+            addendaTypeCode: '05',
+            paymentRelatedInformation: 'Q4 BONUS 2026',
+            addendaSequenceNumber: '0001',
+            entryDetailSequenceNumber: '0000002'
+          })
+        ])
+      ],
+      control: rec('batchControl')
+    },
+    {
+      header: rec('batchHeader', {
+        serviceClassCode: '225',
+        companyName: 'ACME BILLING',
+        companyDiscretionaryData: '',
+        companyIdentification: '1234567890',
+        standardEntryClassCode: 'PPD',
+        companyEntryDescription: 'INSURANCE',
+        companyDescriptiveDate: '261101',
+        effectiveEntryDate: '261106',
+        settlementDate: '',
+        originatorStatusCode: '1',
+        originatingDFIIdentification: '12345678',
+        batchNumber: '0000002'
+      }),
+      entries: [
+        entry({
+          transactionCode: '27',
+          receivingDFIIdentification: '09100001',
+          checkDigit: '9',
+          dfiAccountNumber: '4455667788',
+          amount: '0000125050',
+          identificationNumber: 'POLICY-8891',
+          individualName: 'ROBERT JOHNSON',
+          addendaRecordIndicator: '0',
+          traceNumber: '123456780000003'
+        }),
+        entry({
+          transactionCode: '27',
+          receivingDFIIdentification: '12100024',
+          checkDigit: '8',
+          dfiAccountNumber: '8899001122',
+          amount: '0000008999',
+          identificationNumber: 'POLICY-8892',
+          individualName: 'MARIA GARCIA',
+          addendaRecordIndicator: '0',
+          traceNumber: '123456780000004'
+        })
+      ],
+      control: rec('batchControl')
+    }
+  ],
+  fileControl: rec('fileControl'),
+  padding: 0,
+  parseIssues: []
+};
+
+const computed = ACH.applyComputed(doc);
+const text = ACH.buildFile(doc, { applyComputed: true, lineEnding: '\r\n', finalNewline: true });
+
+const lines = text.split('\r\n').filter(Boolean);
+if (lines.length !== 20) throw new Error('Expected 20 physical records, got ' + lines.length);
+lines.forEach((line, i) => {
+  if (line.length !== 94) throw new Error('Line ' + (i + 1) + ' is ' + line.length + ' chars');
+});
+
+const parsed = ACH.parseFile(text);
+const issues = ACH.validate(parsed.doc, { autoFix: true });
+const errors = issues.filter((i) => i.severity === 'error');
+if (errors.length) {
+  console.error(errors);
+  throw new Error('Generated sample has validation errors');
+}
+
+mkdirSync(join(root, 'samples'), { recursive: true });
+writeFileSync(join(root, 'samples', 'payroll.ach'), text, 'utf8');
+
+const sampleJs = '/* Generated by tools/make-samples.mjs. */\n' +
+  'window.ACH_SAMPLE = ' + JSON.stringify({ name: 'payroll.ach', text }, null, 2) + ';\n';
+writeFileSync(join(root, 'js', 'sample.js'), sampleJs, 'utf8');
+
+console.log('Sample written. Records:', lines.length);
+console.log('Blocks:', computed.file.blockCount, 'Padding:', computed.file.padding);
+console.log('Batches:', computed.file.batchCount, 'Entries+addenda:', computed.file.entryAddendaCount);
+console.log('Hash:', computed.file.entryHash, 'Debits:', ACH.formatCents(computed.file.debit), 'Credits:', ACH.formatCents(computed.file.credit));
+console.log('Validation issues:', issues.length);

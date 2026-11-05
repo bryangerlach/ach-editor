@@ -1,0 +1,4 @@
+* text=auto eol=lf
+
+# ACH files are line-ending-sensitive; keep the exact checked-in bytes.
+*.ach -text
