@@ -69,7 +69,12 @@ test('sample parses into the expected structure and totals', () => {
 
 test('sample round-trips byte for byte', () => {
   const { doc } = ACH.parseFile(sampleText);
-  const rebuilt = ACH.buildFile(doc, { applyComputed: true, lineEnding: '\r\n', finalNewline: true });
+  const lineEnding = sampleText.includes('\r\n') ? '\r\n' : '\n';
+  const rebuilt = ACH.buildFile(doc, {
+    applyComputed: true,
+    lineEnding,
+    finalNewline: sampleText.endsWith('\n')
+  });
   assert.equal(rebuilt, sampleText);
 });
 
